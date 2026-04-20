@@ -3,7 +3,7 @@ import { db } from "@/lib/db"
 import { spaces, photos } from "@/lib/db/schema"
 import { getSession } from "@/lib/auth"
 import { eq, inArray, desc } from "drizzle-orm"
-import { getPresignedDownloadUrl } from "@/lib/r2"
+import { publicUrl } from "@/lib/r2"
 
 type Params = { params: Promise<{ spaceId: string }> }
 
@@ -40,14 +40,12 @@ export async function GET(req: NextRequest, { params }: Params) {
     )
     .orderBy(desc(photos.createdAt))
 
-  const result = await Promise.all(
-    rows
-      .filter((r) => r.thumbnailKey)
-      .map(async (r) => ({
-        ...r,
-        thumbnailUrl: await getPresignedDownloadUrl(r.thumbnailKey!),
-      }))
-  )
+  const result = rows
+    .filter((r) => r.thumbnailKey)
+    .map((r) => ({
+      ...r,
+      thumbnailUrl: publicUrl(r.thumbnailKey!),
+    }))
 
   return NextResponse.json({ photos: result })
 }

@@ -82,6 +82,8 @@ export const photos = pgTable("photos", {
   height: integer("height"),
   faceIndexed: boolean("face_indexed").notNull().default(false),
   faceCount: integer("face_count").notNull().default(0),
+  rekognitionFaceIds: text("rekognition_face_ids").array().default([]),
+  faceBoundingBoxes: text("face_bounding_boxes"), // JSON: [{faceId,left,top,width,height}]
   createdAt: timestamp("created_at").notNull().defaultNow(),
 })
 

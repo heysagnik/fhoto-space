@@ -1,9 +1,8 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import type { MatchedPhoto } from "@/types"
+import { X, Camera, RefreshCw, Loader2, Search } from "lucide-react"
 
 type Step = "preview" | "captured" | "searching"
 
@@ -29,38 +28,69 @@ export function SelfieCapture({ isOpen, onClose, spaceId, onResults }: Props) {
 
   async function startCamera() {
     try {
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+      if (isMobile) {
+        throw new Error("Mobile device detected")
+      }
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("Camera API not available")
+      }
       const s = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 640 } },
       })
       streamRef.current = s
-      if (videoRef.current) videoRef.current.srcObject = s
+      if (videoRef.current) {
+        videoRef.current.srcObject = s
+        await videoRef.current.play().catch(() => {})
+      }
     } catch {
-      setError("Camera access denied. Please allow camera permissions.")
+      setError("Please use the button below to take a photo.")
     }
   }
 
   useEffect(() => {
     if (isOpen) {
-      startCamera()
-    } else {
-      stopStream()
       setStep("preview")
       setCapturedDataUrl(null)
       setError(null)
+      startCamera()
+    } else {
+      stopStream()
     }
     return stopStream
+  }, [isOpen])
+
+  useEffect(() => {
+    if (isOpen) document.body.style.overflow = "hidden"
+    else document.body.style.overflow = ""
+    return () => { document.body.style.overflow = "" }
   }, [isOpen])
 
   function capture() {
     const video = videoRef.current
     const canvas = canvasRef.current
     if (!video || !canvas) return
-    canvas.width = 640
-    canvas.height = 640
-    canvas.getContext("2d")?.drawImage(video, 0, 0, 640, 640)
+    const width = video.videoWidth || 640
+    const height = video.videoHeight || 640
+    canvas.width = width
+    canvas.height = height
+    canvas.getContext("2d")?.drawImage(video, 0, 0, width, height)
     setCapturedDataUrl(canvas.toDataURL("image/jpeg", 0.9))
     setStep("captured")
     stopStream()
+  }
+
+  function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      setCapturedDataUrl(event.target?.result as string)
+      setStep("captured")
+      stopStream()
+    }
+    reader.readAsDataURL(file)
   }
 
   function retake() {
@@ -89,75 +119,146 @@ export function SelfieCapture({ isOpen, onClose, spaceId, onResults }: Props) {
     }
   }
 
+  if (!isOpen) return null
+
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => { if (!open && step !== "searching") onClose() }}>
-      <DialogContent className="sm:max-w-sm">
-        <DialogHeader>
-          <DialogTitle>Take a selfie</DialogTitle>
-        </DialogHeader>
+    <div className="fixed inset-0 z-50 bg-black flex flex-col font-sans">
+      {/* Header */}
+      <div className="absolute top-0 inset-x-0 flex items-center justify-between px-4 sm:px-6 py-4 shrink-0 z-20 bg-gradient-to-b from-black/60 to-transparent">
+        <button
+          onClick={() => { if (step !== "searching") onClose() }}
+          className="w-10 h-10 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center text-white border border-white/10 hover:bg-black/60 transition-colors"
+          disabled={step === "searching"}
+        >
+          <X className="w-5 h-5" />
+        </button>
+        <div className="px-4 py-1.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10 text-white font-medium text-[13px] tracking-wide shadow-sm">
+          {step === "preview" ? "Position your face" : step === "captured" ? "Confirm photo" : "Searching…"}
+        </div>
+        <div className="w-10 h-10" />
+      </div>
 
-        <div className="flex flex-col gap-3">
-          {step === "preview" && (
-            <div className="relative">
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                className="w-full rounded-xl aspect-square object-cover"
-                style={{ transform: "scaleX(-1)" }}
-              />
-              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <svg width="200" height="260" viewBox="0 0 200 260">
-                  <ellipse cx="100" cy="130" rx="90" ry="120" fill="none" stroke="white" strokeWidth="2" opacity="0.6" />
-                </svg>
-                <p className="text-white text-sm mt-2 opacity-80">Position your face in the oval</p>
+      {/* Camera / preview area */}
+      <div className="flex-1 relative overflow-hidden bg-black">
+        {step === "preview" && !error && (
+          <>
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="absolute inset-0 w-full h-full object-cover"
+              style={{ transform: "scaleX(-1)" }}
+            />
+            {/* Soft oval guide */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+              <div className="w-[80%] max-w-[320px] aspect-[3/4] border-2 border-white/50 rounded-[4rem] shadow-[0_0_0_9999px_rgba(0,0,0,0.5)] transition-all" />
+              <p className="text-white/90 text-[14px] font-medium mt-8 bg-black/40 px-4 py-1.5 rounded-full backdrop-blur-md border border-white/10">
+                Center your face in the frame
+              </p>
+            </div>
+          </>
+        )}
+
+        {step === "preview" && error && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 p-6 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-zinc-900 border border-white/10 flex items-center justify-center shadow-xl">
+               <Camera className="w-7 h-7 text-zinc-400" />
+            </div>
+            <div>
+              <h3 className="text-white font-semibold text-lg tracking-tight mb-1">Ready for a Selfie</h3>
+              <p className="text-zinc-400 text-[14px] max-w-xs mx-auto font-light">
+                Use your device's camera to snap a quick photo. We'll use this to match you with your gallery.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {step === "captured" && capturedDataUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={capturedDataUrl}
+            className="absolute inset-0 w-full h-full object-cover"
+            style={{ transform: "scaleX(-1)" }}
+            alt="Captured selfie"
+          />
+        )}
+
+        {step === "searching" && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 bg-black z-10">
+            {capturedDataUrl && (
+              <div className="relative">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={capturedDataUrl}
+                  className="w-32 h-32 rounded-full object-cover border-4 border-white/20 opacity-80"
+                  style={{ transform: "scaleX(-1)" }}
+                  alt="Searching selfie"
+                />
+                <div className="absolute inset-0 rounded-full border-4 border-white border-t-transparent animate-spin" />
               </div>
+            )}
+            <div className="flex flex-col items-center gap-1.5">
+              <p className="text-white font-semibold text-lg tracking-tight flex items-center gap-2">
+                <Search className="w-5 h-5 text-zinc-400" /> Scanning event…
+              </p>
+              <p className="text-zinc-500 text-[14px] font-light">Matching your face securely across photos</p>
             </div>
-          )}
+          </div>
+        )}
+      </div>
 
-          {step === "captured" && capturedDataUrl && (
-            <div className="flex flex-col gap-2">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={capturedDataUrl}
-                className="w-full rounded-xl aspect-square object-cover"
-                style={{ transform: "scaleX(-1)" }}
-                alt="Captured selfie"
+      {/* Bottom controls */}
+      <div className="absolute bottom-0 inset-x-0 px-6 pb-12 pt-16 flex flex-col gap-4 justify-center bg-gradient-to-t from-black via-black/80 to-transparent">
+        {error && (
+          <div className="flex flex-col items-center w-full max-w-sm mx-auto">
+            <label className="w-full bg-white text-black px-5 py-4 rounded-2xl text-[15px] font-semibold cursor-pointer transition-all active:scale-[0.98] flex items-center justify-center gap-2 shadow-xl hover:bg-zinc-100">
+              <Camera className="w-5 h-5" />
+              Capture Photo natively
+              <input 
+                type="file" 
+                accept="image/*" 
+                capture="user" 
+                className="hidden" 
+                onChange={handleFileUpload} 
               />
-              <p className="text-sm text-slate-500 text-center">Looking good? Hit search or retake.</p>
-            </div>
-          )}
+            </label>
+          </div>
+        )}
 
-          {step === "searching" && (
-            <div className="flex flex-col items-center justify-center gap-4 py-12">
-              <svg className="animate-spin w-10 h-10 text-blue-600" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-              </svg>
-              <p className="text-sm text-slate-500">Finding your photos...</p>
-            </div>
-          )}
+        {step === "preview" && !error && (
+          <div className="flex justify-center w-full">
+            <button
+              onClick={capture}
+              className="w-20 h-20 rounded-full border-[5px] border-white/30 flex items-center justify-center active:scale-95 transition-all outline-none group"
+              aria-label="Capture"
+            >
+              <div className="w-[60px] h-[60px] rounded-full bg-white group-hover:scale-[0.95] transition-transform" />
+            </button>
+          </div>
+        )}
 
-          {error && (
-            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
-          )}
+        {step === "captured" && (
+          <div className="flex items-center gap-4 w-full max-w-sm mx-auto">
+            <button 
+              onClick={retake} 
+              className="flex-1 h-14 rounded-2xl bg-white/10 text-white font-medium text-[15px] hover:bg-white/20 active:scale-95 transition-all flex items-center justify-center gap-2 backdrop-blur-md border border-white/10"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Retake
+            </button>
+            <button 
+              onClick={search} 
+              className="flex-[2] h-14 rounded-2xl bg-white text-black font-semibold text-[15px] hover:bg-zinc-100 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-xl"
+            >
+              <Search className="w-4 h-4" />
+              Find my photos
+            </button>
+          </div>
+        )}
+      </div>
 
-          <canvas ref={canvasRef} className="hidden" />
-        </div>
-
-        <div className="flex justify-end gap-2 pt-1">
-          {step === "preview" && (
-            <Button onClick={capture} className="w-full">Capture</Button>
-          )}
-          {step === "captured" && (
-            <>
-              <Button variant="ghost" onClick={retake}>Retake</Button>
-              <Button onClick={search}>Find my photos</Button>
-            </>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
+      <canvas ref={canvasRef} className="hidden" />
+    </div>
   )
 }

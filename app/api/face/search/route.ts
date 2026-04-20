@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
-import { db } from "@/lib/db"
-import { faceEmbeddings } from "@/lib/db/schema"
-import { extractEmbeddings } from "@/lib/face/pipeline"
-import { cosineDistance, lt, eq, and } from "drizzle-orm"
+import { searchFaces } from "@/lib/rekognition"
 
 const bodySchema = z.object({
   spaceId: z.string().uuid(),
@@ -18,21 +15,20 @@ export async function POST(req: NextRequest) {
 
   const { spaceId, selfieBase64 } = parsed.data
   const buffer = Buffer.from(selfieBase64, "base64")
-  const embeddingsList = await extractEmbeddings(buffer)
 
-  if (embeddingsList.length === 0) {
-    return NextResponse.json({ photoIds: [], error: "no_face_detected" })
+  try {
+    const photoIds = await searchFaces(spaceId, buffer, 80)
+    if (photoIds.length === 0) {
+      return NextResponse.json({ photoIds: [], error: "no_match" })
+    }
+    return NextResponse.json({ photoIds })
+  } catch (err: unknown) {
+    const name = (err as { name?: string }).name
+    if (name === "InvalidParameterException") {
+      // Rekognition couldn't detect a face in the selfie
+      return NextResponse.json({ photoIds: [], error: "no_face_detected" })
+    }
+    console.error("[face/search] rekognition error:", err)
+    return NextResponse.json({ error: "Search failed" }, { status: 500 })
   }
-
-  const queryEmbedding = embeddingsList[0]
-  const distance = cosineDistance(faceEmbeddings.embedding, queryEmbedding)
-
-  const rows = await db
-    .selectDistinct({ photoId: faceEmbeddings.photoId })
-    .from(faceEmbeddings)
-    .where(and(eq(faceEmbeddings.spaceId, spaceId), lt(distance, 0.4)))
-    .orderBy(distance)
-    .limit(200)
-
-  return NextResponse.json({ photoIds: rows.map((r) => r.photoId) })
 }

@@ -69,7 +69,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Not found" }, { status: 404 })
   }
 
-  await db.update(spaces).set({ status: "deleted" }).where(eq(spaces.id, spaceId))
+  await db.delete(spaces).where(eq(spaces.id, spaceId))
 
   return new NextResponse(null, { status: 204 })
 }

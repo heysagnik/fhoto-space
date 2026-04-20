@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogHeader } from "@/components/ui/dialog"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import Image from "next/image"
 import type { MatchedPhoto } from "@/types"
@@ -26,24 +26,25 @@ export function PhotoGallery({ photos }: Props) {
   }, [lightboxIndex, photos.length])
 
   return (
-    <>
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 p-4">
-        {photos.map((photo, i) => (
-          <div
-            key={photo.id}
-            className="aspect-square overflow-hidden rounded-xl cursor-pointer bg-slate-100 relative group"
-            onClick={() => setLightboxIndex(i)}
-          >
-            <Image
-              src={photo.thumbnailUrl}
-              fill
-              sizes="(max-width:640px) 50vw, (max-width:768px) 33vw, 25vw"
-              className="object-cover transition-transform duration-200 group-hover:scale-[1.03]"
-              alt={`Photo ${i + 1}`}
-            />
-          </div>
-        ))}
-      </div>
+    <div className="w-full h-full">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-4 md:gap-6 p-2 sm:p-4 md:p-6 lg:p-8">
+          {photos.map((photo, i) => (
+            <div
+              key={photo.id}
+              className="aspect-square overflow-hidden rounded-2xl cursor-pointer bg-zinc-100 relative group shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-lg transition-all active:scale-[0.98] border border-black/[0.03]"
+              onClick={() => setLightboxIndex(i)}
+            >
+              <Image
+                src={photo.thumbnailUrl}
+                fill
+                sizes="(max-width:640px) 50vw, (max-width:768px) 33vw, (max-width:1024px) 25vw, 20vw"
+                className="object-cover transition-transform duration-300 group-hover:scale-105"
+                alt={`Photo ${i + 1}`}
+                unoptimized
+              />
+            </div>
+          ))}
+        </div>
 
       {lightboxIndex !== null && (
         <LightboxModal
@@ -55,7 +56,7 @@ export function PhotoGallery({ photos }: Props) {
           onNext={() => setLightboxIndex((i) => Math.min(photos.length - 1, (i ?? 0) + 1))}
         />
       )}
-    </>
+    </div>
   )
 }
 
@@ -67,25 +68,47 @@ function LightboxModal({
 }) {
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
-      <DialogContent className="max-w-4xl p-2 bg-black/90 border-white/10">
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-center">
+      <DialogContent
+        className="left-1/2 top-1/2 h-[100svh] w-screen max-w-none -translate-x-1/2 -translate-y-1/2 rounded-none border-0 bg-black p-0 gap-0 overflow-hidden data-[state=open]:!animate-none data-[state=closed]:!animate-none sm:h-[85vh] sm:w-[min(90vw,64rem)] sm:max-w-4xl sm:rounded-2xl sm:border sm:border-white/10 sm:bg-black/90 sm:p-4"
+        aria-describedby={undefined}
+      >
+        <DialogHeader className="sr-only">
+          <DialogTitle>Photo Lightbox</DialogTitle>
+          <DialogDescription>Viewing full size photo</DialogDescription>
+        </DialogHeader>
+        
+        <div className="relative flex h-full flex-col justify-between pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-0">
+          <div className="relative flex min-h-0 flex-1 items-center justify-center p-0 sm:p-2">
             <Image
               src={photo.thumbnailUrl}
-              width={900}
-              height={900}
-              className="max-h-[80vh] w-auto object-contain rounded-xl"
+              fill
+              className="object-contain"
               alt={`Photo ${index + 1}`}
               priority
+              unoptimized
             />
           </div>
-          <div className="flex items-center justify-between px-2 pb-1">
-            <Button size="icon" variant="ghost" disabled={index === 0} onClick={onPrev} className="text-white hover:bg-white/10">
-              <ChevronLeft size={20} />
+          
+          {/* Close button explicitly for mobile so they see it easily on top of the black background */}
+          <Button 
+            size="icon" 
+            variant="ghost" 
+            onClick={onClose} 
+            className="absolute right-4 top-[max(0.75rem,env(safe-area-inset-top))] sm:hidden z-50 text-white bg-black/30 hover:bg-black/50 rounded-full"
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            <span className="sr-only">Close</span>
+          </Button>
+          
+          <div className="absolute inset-x-0 bottom-[max(0.75rem,env(safe-area-inset-bottom))] mx-auto flex w-full max-w-md items-center justify-between px-4 bg-transparent shrink-0 z-10 sm:relative sm:inset-auto sm:bottom-auto sm:px-0">
+            <Button size="icon" variant="ghost" disabled={index === 0} onClick={onPrev} className="rounded-full shadow-lg h-12 w-12 sm:h-10 sm:w-10 bg-white/20 hover:bg-white/30 text-white border-0">
+              <ChevronLeft size={24} />
             </Button>
-            <span className="text-sm text-white/70">{index + 1} of {total}</span>
-            <Button size="icon" variant="ghost" disabled={index === total - 1} onClick={onNext} className="text-white hover:bg-white/10">
-              <ChevronRight size={20} />
+            <span className="text-sm font-medium text-white/90 bg-black/60 px-4 py-2 rounded-full border border-white/10 backdrop-blur-md">
+              {index + 1} / {total}
+            </span>
+            <Button size="icon" variant="ghost" disabled={index === total - 1} onClick={onNext} className="rounded-full shadow-lg h-12 w-12 sm:h-10 sm:w-10 bg-white/20 hover:bg-white/30 text-white border-0">
+              <ChevronRight size={24} />
             </Button>
           </div>
         </div>

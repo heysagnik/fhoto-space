@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { db } from "@/lib/db"
-import { spaces, photos, faceEmbeddings, analyticsEvents } from "@/lib/db/schema"
-import { extractEmbeddings } from "@/lib/face/pipeline"
+import { spaces, photos, analyticsEvents } from "@/lib/db/schema"
+import { searchFaces } from "@/lib/rekognition"
 import { publicUrl } from "@/lib/r2"
-import { cosineDistance, lt, eq, and, inArray } from "drizzle-orm"
+import { eq, inArray } from "drizzle-orm"
 
 const bodySchema = z.object({
   spaceId: z.string().uuid(),
@@ -45,40 +45,37 @@ export async function POST(req: NextRequest) {
   }
 
   const buffer = Buffer.from(selfieBase64.replace(/^data:image\/\w+;base64,/, ""), "base64")
-  const embeddingsList = await extractEmbeddings(buffer)
-
-  if (embeddingsList.length === 0) {
-    return NextResponse.json({ photos: [], error: "no_face_detected" })
+  
+  let matchedPhotoIds: string[] = []
+  try {
+    // Search AWS Rekognition collection created for this space
+    matchedPhotoIds = await searchFaces(spaceId, buffer)
+  } catch (error: any) {
+    if (error.name === 'InvalidParameterException' || error.message?.includes('face not detected')) {
+      return NextResponse.json({ photos: [], error: "no_face_detected" })
+    }
+    console.error('[visitor/search] Rekognition search error:', error)
+    return NextResponse.json({ photos: [], error: "search_failed" }, { status: 500 })
   }
 
-  const queryEmbedding = embeddingsList[0]
-  const distance = cosineDistance(faceEmbeddings.embedding, queryEmbedding)
-
-  const matchedRows = await db
-    .selectDistinct({ photoId: faceEmbeddings.photoId })
-    .from(faceEmbeddings)
-    .where(and(eq(faceEmbeddings.spaceId, spaceId), lt(distance, 0.4)))
-    .orderBy(distance)
-    .limit(200)
-
-  if (matchedRows.length === 0) {
+  if (matchedPhotoIds.length === 0) {
     return NextResponse.json({ photos: [] })
   }
 
   const photoRows = await db
     .select({ id: photos.id, thumbnailKey: photos.thumbnailKey, originalKey: photos.originalKey })
     .from(photos)
-    .where(inArray(photos.id, matchedRows.map((r) => r.photoId)))
+    .where(inArray(photos.id, matchedPhotoIds))
 
   const result = photoRows.map((p) => ({
     id: p.id,
-    thumbnailUrl: publicUrl(p.thumbnailKey ?? p.originalKey),
+    thumbnailUrl: publicUrl(p.thumbnailKey ?? p.originalKey!),
   }))
 
   void db.insert(analyticsEvents).values({
     spaceId,
     eventType: "selfie_search",
-    meta: String(matchedRows.length),
+    meta: String(matchedPhotoIds.length),
   })
 
   return NextResponse.json({ photos: result })

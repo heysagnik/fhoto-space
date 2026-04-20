@@ -2,7 +2,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary"
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", backgroundColor: "oklch(97.02% 0 0)" }}>
+    <div className="flex flex-col min-h-screen bg-[#FDFDFD]">
       <ErrorBoundary>{children}</ErrorBoundary>
     </div>
   )

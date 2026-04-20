@@ -22,7 +22,7 @@ function formatSize(bytes: number) {
 
 interface ImageUploaderProps {
   spaceId: string
-  onUploadsComplete?: () => void
+  onUploadsComplete?: (donePhotoIds: string[]) => void
 }
 
 export function ImageUploader({ spaceId, onUploadsComplete }: ImageUploaderProps) {
@@ -30,43 +30,14 @@ export function ImageUploader({ spaceId, onUploadsComplete }: ImageUploaderProps
   const { files, startUpload, removeFile, totalProgress } = useUpload(spaceId)
   const [isDragging, setIsDragging] = useState(false)
 
-  // After upload batch finishes, poll until face indexing completes, then notify parent
+  // Notify parent once when a batch transitions from active → all done/error
   const prevHasActive = useRef(false)
-  const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
   useEffect(() => {
     const hasActive = files.some((f) => f.status === "uploading" || f.status === "queued")
-
     if (prevHasActive.current && !hasActive && files.length > 0) {
-      // Batch just finished uploading — show grid immediately, then poll for indexing
-      onUploadsComplete?.()
-
       const doneIds = files.filter((f) => f.status === "done" && f.photoId).map((f) => f.photoId!)
-      if (doneIds.length === 0) return
-
-      // Mark all done files as "indexing"
-      // (this is cosmetic — the grid already shows them)
-      let cancelled = false
-
-      async function pollIndexing() {
-        while (!cancelled) {
-          await new Promise((r) => setTimeout(r, 3000))
-          if (cancelled) break
-          const res = await fetch(`/api/photos/status?ids=${doneIds.join(",")}`)
-          if (!res.ok) break
-          const { statuses } = await res.json()
-          const allDone = statuses.every((s: { faceIndexed: boolean }) => s.faceIndexed)
-          if (allDone) {
-            onUploadsComplete?.() // refresh grid again now that faces are indexed
-            break
-          }
-        }
-      }
-
-      pollIndexing()
-      return () => { cancelled = true }
+      onUploadsComplete?.(doneIds)
     }
-
     prevHasActive.current = hasActive
   }, [files, onUploadsComplete])
 

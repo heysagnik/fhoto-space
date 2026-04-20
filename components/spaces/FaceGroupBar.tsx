@@ -58,15 +58,16 @@ export function FaceGroupBar({ clusters, selectedClusterId, onSelect }: Props) {
                 : "border-slate-200 hover:border-slate-400",
             ].join(" ")}>
               <Image
-                src={cluster.thumbnailUrl}
+                src={cluster.faceCropUrl}
                 fill
                 className="object-cover"
                 alt={`Person ${cluster.clusterId + 1}`}
                 sizes="56px"
+                unoptimized
               />
             </div>
             <span className={`text-[11px] font-semibold ${selectedClusterId === cluster.clusterId ? "text-blue-600" : "text-slate-500"}`}>
-              {cluster.photoCount}
+              {cluster.photoCount} {cluster.photoCount === 1 ? "photo" : "photos"}
             </span>
           </button>
         ))}

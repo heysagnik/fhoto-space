@@ -20,8 +20,16 @@ export async function POST(req: NextRequest) {
 
   const { photoIds, spaceId } = parsed.data
 
-  const [space] = await db.select({ status: spaces.status }).from(spaces).where(eq(spaces.id, spaceId))
-  if (!space || space.status !== "active") {
+  let spaceRow;
+  try {
+    const spacesResult = await db.select({ status: spaces.status }).from(spaces).where(eq(spaces.id, spaceId))
+    spaceRow = spacesResult[0];
+  } catch (error) {
+    console.error("Database connection error:", error)
+    return NextResponse.json({ error: "Failed to connect to database" }, { status: 500 })
+  }
+
+  if (!spaceRow || spaceRow.status !== "active") {
     return NextResponse.json({ error: "Space not available" }, { status: 403 })
   }
 

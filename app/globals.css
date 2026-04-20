@@ -6,21 +6,22 @@
 
 :root,
 .light {
+  color-scheme: light;
   --radius: 0.5rem;
 
-  /* Noticeably darker than card surface so cards pop */
-  --page-bg: oklch(93% 0.006 264);
+  /* Airy light page background */
+  --page-bg: oklch(98.5% 0.002 264);
 
-  /* Six-layer shadow anatomy — single light source, no pure black */
+  /* Soft and airy shadow anatomy */
   --card-shadow:
     0 0 0 1px oklch(88% 0.008 264),
-    0 1px 2px oklch(15% 0.03 264 / 0.06),
-    0 3px 8px oklch(15% 0.03 264 / 0.08);
+    0 1px 2px oklch(15% 0.03 264 / 0.03),
+    0 3px 8px oklch(15% 0.03 264 / 0.05);
   --card-shadow-hover:
-    0 0 0 1px oklch(82% 0.01 264),
-    0 2px 4px oklch(15% 0.03 264 / 0.07),
-    0 6px 16px oklch(15% 0.03 264 / 0.10),
-    0 12px 28px oklch(15% 0.03 264 / 0.06);
+    0 0 0 1px oklch(85% 0.01 264),
+    0 2px 4px oklch(15% 0.03 264 / 0.04),
+    0 6px 16px oklch(15% 0.03 264 / 0.08),
+    0 12px 28px oklch(15% 0.03 264 / 0.05);
 
   --page-x: 1.5rem;
   --page-y: 2rem;
@@ -34,6 +35,7 @@
 
 body {
   background-color: var(--page-bg);
+  color: oklch(20% 0.01 264);
   font-family: var(--font-geist-sans, system-ui, sans-serif);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -67,11 +69,11 @@ h1, h2, h3, h4, h5, h6 {
   align-items: center;
   gap: 0.75rem;
   padding: 0 var(--page-x);
-  background-color: oklch(100% 0 0 / 0.92);
+  background-color: oklch(100% 0 0 / 0.85);
   -webkit-backdrop-filter: blur(16px) saturate(1.4);
   backdrop-filter: blur(16px) saturate(1.4);
   border-bottom: 1px solid oklch(88% 0.006 264);
-  box-shadow: 0 1px 3px oklch(15% 0.03 264 / 0.06);
+  box-shadow: 0 1px 3px oklch(15% 0.03 264 / 0.03);
   font-size: 0.875rem;
 }
 

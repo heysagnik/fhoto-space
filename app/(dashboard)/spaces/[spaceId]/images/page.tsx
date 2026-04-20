@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm"
 import { SpaceNav } from "@/components/spaces/SpaceNav"
 import { ImagesShell } from "@/components/spaces/ImagesShell"
 import type { Space } from "@/types"
+import { Camera, ChevronRight } from "lucide-react"
 
 type Params = { params: Promise<{ spaceId: string }> }
 
@@ -27,37 +28,31 @@ export default async function SpaceImagesPage({ params }: Params) {
     .then((r) => r.length)
 
   return (
-    <div className="page-shell">
-      <header className="app-header justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center shadow-sm shrink-0">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round">
-              <rect x="3" y="3" width="18" height="18" rx="3"/>
-              <circle cx="8.5" cy="8.5" r="1.5" fill="white" stroke="none"/>
-              <polyline points="21 15 16 10 5 21"/>
-            </svg>
+    <div className="page-shell bg-[#FDFDFD]">
+      <header className="app-header flex items-center justify-between border-b border-black/5 bg-white/60 backdrop-blur-md sticky top-0 z-40">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 pr-4 border-r border-black/[0.06]">
+            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-black/[0.03] border border-black/[0.05] shadow-sm shrink-0">
+              <Camera className="w-4 h-4 text-zinc-800" />
+            </div>
+            <span className="font-semibold text-zinc-900 tracking-tight">FotoSpace</span>
           </div>
-          <span className="font-bold text-slate-900 tracking-tight">FotoSpace</span>
+
+          <nav className="hidden sm:flex items-center gap-1.5 text-[13px]">
+            <span className="text-zinc-500 font-medium">Spaces</span>
+            <ChevronRight className="w-3.5 h-3.5 text-zinc-300" />
+            <span className="font-semibold text-zinc-800 truncate max-w-[16rem]">{space.name}</span>
+            <ChevronRight className="w-3.5 h-3.5 text-zinc-300" />
+            <span className="text-zinc-500 font-medium">Images</span>
+          </nav>
         </div>
 
-        <nav className="absolute left-1/2 -translate-x-1/2 hidden sm:flex items-center gap-1.5 text-sm">
-          <span className="text-slate-400 font-medium">Spaces</span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-slate-300">
-            <polyline points="9 18 15 12 9 6"/>
-          </svg>
-          <span className="font-semibold text-slate-800 truncate max-w-[16rem]">{space.name}</span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-slate-300">
-            <polyline points="9 18 15 12 9 6"/>
-          </svg>
-          <span className="text-slate-500">Images</span>
-        </nav>
-
-        <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full tabular-nums">
+        <span className="text-xs font-semibold text-zinc-600 bg-black/[0.03] border border-black/[0.04] px-2.5 py-1 rounded-full tabular-nums">
           {photoCount} photo{photoCount !== 1 ? "s" : ""}
         </span>
       </header>
 
-      <div className="page-content flex gap-8">
+      <div className="page-content flex flex-col md:flex-row gap-8 max-w-[1400px] w-full mx-auto px-6 py-10 md:px-12 md:py-12">
         <SpaceNav spaceId={spaceId} active="images" spaceName={space.name} />
         <main className="flex-1 min-w-0">
           <ImagesShell spaceId={spaceId} />

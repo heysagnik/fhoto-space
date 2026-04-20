@@ -1,28 +1,56 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
-import { spaces, faceEmbeddings, photos } from "@/lib/db/schema"
+import { spaces, photos } from "@/lib/db/schema"
 import { getSession } from "@/lib/auth"
 import { eq, inArray } from "drizzle-orm"
-import { getPresignedDownloadUrl } from "@/lib/r2"
+import { publicUrl } from "@/lib/r2"
+import { listFacesByPhoto } from "@/lib/rekognition"
+import { RekognitionClient, SearchFacesCommand } from "@aws-sdk/client-rekognition"
 
 type Params = { params: Promise<{ spaceId: string }> }
-
-function cosineDistance(a: number[], b: number[]): number {
-  let dot = 0, na = 0, nb = 0
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i]
-    na += a[i] * a[i]
-    nb += b[i] * b[i]
-  }
-  return 1 - dot / (Math.sqrt(na) * Math.sqrt(nb) + 1e-10)
-}
 
 export interface FaceCluster {
   clusterId: number
   representativePhotoId: string
+  representativeFaceId: string
   thumbnailUrl: string
+  faceCropUrl: string
   photoCount: number
   photoIds: string[]
+}
+
+const rekognition = new RekognitionClient({
+  region: process.env.AWS_REGION!,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+  },
+})
+
+// Union-Find (path-compressed)
+class UnionFind {
+  private parent: Map<string, string> = new Map()
+
+  find(x: string): string {
+    if (!this.parent.has(x)) this.parent.set(x, x)
+    if (this.parent.get(x) !== x) this.parent.set(x, this.find(this.parent.get(x)!))
+    return this.parent.get(x)!
+  }
+
+  union(x: string, y: string) {
+    const rx = this.find(x), ry = this.find(y)
+    if (rx !== ry) this.parent.set(rx, ry)
+  }
+
+  groups(): Map<string, string[]> {
+    const g = new Map<string, string[]>()
+    for (const key of this.parent.keys()) {
+      const root = this.find(key)
+      if (!g.has(root)) g.set(root, [])
+      g.get(root)!.push(key)
+    }
+    return g
+  }
 }
 
 export async function GET(_req: NextRequest, { params }: Params) {
@@ -35,59 +63,100 @@ export async function GET(_req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Not found" }, { status: 404 })
   }
 
-  const rows = await db
-    .select({ photoId: faceEmbeddings.photoId, embedding: faceEmbeddings.embedding })
-    .from(faceEmbeddings)
-    .where(eq(faceEmbeddings.spaceId, spaceId))
+  // faceId → photoId map
+  const facesByPhoto = await listFacesByPhoto(spaceId)
+  if (facesByPhoto.size === 0) return NextResponse.json({ clusters: [] })
 
-  if (rows.length === 0) return NextResponse.json({ clusters: [] })
+  // Filter to only photos that actually exist in DB (removes stale Rekognition entries)
+  const rekogPhotoIds = [...facesByPhoto.keys()]
+  const existingPhotos = await db
+    .select({ id: photos.id })
+    .from(photos)
+    .where(inArray(photos.id, rekogPhotoIds))
+  const existingPhotoIdSet = new Set(existingPhotos.map((p) => p.id))
 
-  // Greedy clustering with cosine distance threshold
-  const THRESHOLD = 0.45
-  const clusters: { centroid: number[]; photoIds: string[]; representativePhotoId: string }[] = []
-
-  for (const row of rows) {
-    const emb = row.embedding as unknown as number[]
-    let bestIdx = -1, bestDist = Infinity
-
-    for (let i = 0; i < clusters.length; i++) {
-      const d = cosineDistance(emb, clusters[i].centroid)
-      if (d < bestDist) { bestIdx = i; bestDist = d }
-    }
-
-    if (bestIdx >= 0 && bestDist < THRESHOLD) {
-      const c = clusters[bestIdx]
-      const n = c.photoIds.length
-      c.centroid = c.centroid.map((v, i) => (v * n + emb[i]) / (n + 1))
-      if (!c.photoIds.includes(row.photoId)) c.photoIds.push(row.photoId)
-    } else {
-      clusters.push({ centroid: emb, photoIds: [row.photoId], representativePhotoId: row.photoId })
+  const faceToPhoto = new Map<string, string>()
+  const allFaceIds: string[] = []
+  for (const [photoId, faces] of facesByPhoto) {
+    if (!existingPhotoIdSet.has(photoId)) continue
+    for (const f of faces) {
+      faceToPhoto.set(f.faceId, photoId)
+      allFaceIds.push(f.faceId)
     }
   }
 
+  // Build similarity graph using Rekognition SearchFaces, then Union-Find cluster
+  const uf = new UnionFind()
+  for (const faceId of allFaceIds) uf.find(faceId) // initialize all nodes
+
+  // Run SearchFaces for every face — sequential to avoid rate limits
+  // AWS Rekognition SearchFaces default rate limit is 50 TPS, but can be much lower (5-10 TPS) on newer accounts.
+  for (const faceId of allFaceIds) {
+    let retries = 3
+    while (retries > 0) {
+      try {
+        const res = await rekognition.send(
+          new SearchFacesCommand({
+            CollectionId: spaceId,
+            FaceId: faceId,
+            FaceMatchThreshold: 70, // lower = more matches = fewer false negatives
+            MaxFaces: 1000,
+          })
+        )
+        for (const match of res.FaceMatches ?? []) {
+          if (match.Face?.FaceId) uf.union(faceId, match.Face.FaceId)
+        }
+        break // success, exit retry loop
+      } catch (err: any) {
+        if (err.name === 'ProvisionedThroughputExceededException' && retries > 1) {
+          retries--
+          // exponential backoff delay: 1000ms, 2000ms
+          await new Promise(r => setTimeout(r, (4 - retries) * 1000))
+        } else {
+          console.error('[faces] SearchFaces failed for', faceId, err)
+          break
+        }
+      }
+    }
+  }
+
+  // Group faceIds → person clusters → collect photoIds per cluster
+  const faceGroups = uf.groups() // root → [faceIds]
+  const personClusters: { representativeFaceId: string; photoIds: Set<string> }[] = []
+
+  for (const [, faceIds] of faceGroups) {
+    const photoIds = new Set(faceIds.map((f) => faceToPhoto.get(f)!).filter(Boolean))
+    personClusters.push({ representativeFaceId: faceIds[0], photoIds })
+  }
+
+  // Sort largest clusters first
+  personClusters.sort((a, b) => b.photoIds.size - a.photoIds.size)
+
   // Fetch thumbnails for representative photos
-  const repIds = clusters.map((c) => c.representativePhotoId)
+  const repPhotoIds = personClusters.map((c) => [...c.photoIds][0])
   const thumbRows = await db
     .select({ id: photos.id, thumbnailKey: photos.thumbnailKey })
     .from(photos)
-    .where(inArray(photos.id, repIds))
+    .where(inArray(photos.id, repPhotoIds))
 
   const thumbMap = new Map(thumbRows.map((r) => [r.id, r.thumbnailKey]))
 
-  const result: FaceCluster[] = await Promise.all(
-    clusters
+  const clusters: FaceCluster[] = await Promise.all(
+    personClusters
+      .filter((c) => thumbMap.get([...c.photoIds][0]))
       .map(async (c, i) => {
-        const thumbKey = thumbMap.get(c.representativePhotoId)
+        const repPhotoId = [...c.photoIds][0]
         return {
           clusterId: i,
-          representativePhotoId: c.representativePhotoId,
-          thumbnailUrl: thumbKey ? await getPresignedDownloadUrl(thumbKey) : "",
-          photoCount: c.photoIds.length,
-          photoIds: c.photoIds,
+          representativePhotoId: repPhotoId,
+          representativeFaceId: c.representativeFaceId,
+          thumbnailUrl: publicUrl(thumbMap.get(repPhotoId)!),
+          faceCropUrl: `/api/photos/${repPhotoId}/face-crop?faceId=${c.representativeFaceId}`,
+          photoCount: c.photoIds.size,
+          photoIds: [...c.photoIds],
         }
       })
   )
-  const filteredResult = result.filter((c) => c.thumbnailUrl)
 
-  return NextResponse.json({ clusters: filteredResult })
+  return NextResponse.json({ clusters })
 }

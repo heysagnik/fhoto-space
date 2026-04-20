@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
-import { photos, spaces, faceEmbeddings } from "@/lib/db/schema"
+import { photos, spaces } from "@/lib/db/schema"
 import { getSession } from "@/lib/auth"
 import { eq } from "drizzle-orm"
 import { deleteObject } from "@/lib/r2"
+import { deleteFacesForPhoto } from "@/lib/rekognition"
 
 type Params = { params: Promise<{ photoId: string }> }
 
@@ -20,14 +21,14 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
-  // Delete R2 objects
   await Promise.allSettled([
     deleteObject(photo.originalKey),
     photo.thumbnailKey ? deleteObject(photo.thumbnailKey) : Promise.resolve(),
+    photo.rekognitionFaceIds?.length
+      ? deleteFacesForPhoto(photo.spaceId, photo.rekognitionFaceIds as string[])
+      : Promise.resolve(),
   ])
 
-  // Delete DB records (face embeddings cascade or manual)
-  await db.delete(faceEmbeddings).where(eq(faceEmbeddings.photoId, photoId))
   await db.delete(photos).where(eq(photos.id, photoId))
 
   return NextResponse.json({ ok: true })

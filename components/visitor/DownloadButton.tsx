@@ -1,8 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Download } from "lucide-react"
+import { Download, Loader2 } from "lucide-react"
 
 interface Props {
   photoIds: string[]
@@ -39,11 +38,15 @@ export function DownloadButton({ photoIds, spaceId }: Props) {
 
   return (
     <div className="flex flex-col items-end gap-1">
-      <Button disabled={isLoading} onClick={handleDownload}>
-        {!isLoading && <Download size={16} />}
-        {isLoading ? "Preparing…" : `Download all (${photoIds.length})`}
-      </Button>
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      <button 
+        disabled={isLoading} 
+        onClick={handleDownload}
+        className="h-10 px-4 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl flex items-center justify-center gap-2 text-[13px] font-semibold transition-all active:scale-[0.98] shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100"
+      >
+        {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+        {isLoading ? "Preparing…" : `Download (${photoIds.length})`}
+      </button>
+      {error && <p className="text-[11px] text-red-500 font-medium absolute -bottom-5 right-4">{error}</p>}
     </div>
   )
 }

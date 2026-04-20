@@ -35,16 +35,15 @@ export default function GalleryPage() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen">
-      <header className="sticky top-0 z-10 bg-white/80 backdrop-blur border-b border-slate-100 flex items-center justify-between px-4 py-3">
-        <Button
-          size="icon"
-          variant="ghost"
+    <div className="flex flex-col min-h-screen bg-[#FDFDFD] font-sans">
+      <header className="sticky top-0 z-10 bg-white/60 backdrop-blur-md border-b border-black/[0.05] flex items-center justify-between px-4 py-3 sm:px-6 shadow-sm">
+        <button
           onClick={() => router.push(`/s/${params.slug}`)}
+          className="w-10 h-10 rounded-full flex items-center justify-center text-zinc-900 hover:bg-black/[0.03] active:scale-95 transition-all border border-transparent hover:border-black/[0.05]"
         >
-          <ChevronLeft size={20} />
-        </Button>
-        <p className="font-bold text-sm text-slate-900">{photos.length} photos found</p>
+          <ChevronLeft className="w-5 h-5 absolute ml-[-2px]" />
+        </button>
+        <p className="font-bold text-[14px] text-zinc-900 tracking-tight">{photos.length} photos found</p>
         <DownloadButton photoIds={photos.map((p) => p.id)} spaceId={spaceId} />
       </header>
       <PhotoGallery photos={photos} />
