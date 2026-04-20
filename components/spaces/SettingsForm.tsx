@@ -197,7 +197,7 @@ export function SettingsForm({ space }: { space: Space }) {
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
               <div className="flex-1 flex items-center rounded-xl border border-black/[0.08] bg-zinc-50 focus-within:ring-1 focus-within:ring-zinc-900 focus-within:bg-white transition-all duration-200 overflow-hidden shadow-none">
                 <span className="px-4 text-[14px] text-zinc-400 font-medium shrink-0 border-r border-black/[0.05] py-3 bg-black/[0.02] select-none">
-                  fotospace.app/s/
+                  fhoto-space.vercel.app/s/
                 </span>
                 <input
                   value={slug}
