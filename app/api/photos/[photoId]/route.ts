@@ -31,5 +31,8 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
 
   await db.delete(photos).where(eq(photos.id, photoId))
 
+  // Invalidate cluster cache so next faces load recomputes
+  await db.update(spaces).set({ clustersCachedAt: null }).where(eq(spaces.id, photo.spaceId))
+
   return NextResponse.json({ ok: true })
 }

@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { db } from "@/lib/db"
-import { spaces, photos, analyticsEvents } from "@/lib/db/schema"
+import { spaces, photos } from "@/lib/db/schema"
 import { eq, and, inArray } from "drizzle-orm"
-import { getObject } from "@/lib/r2"
-import archiver from "archiver"
-import { PassThrough } from "stream"
+import { getPresignedDownloadUrl } from "@/lib/r2"
 
 const bodySchema = z.object({
   photoIds: z.array(z.string().uuid()).min(1).max(200),
@@ -20,15 +18,7 @@ export async function POST(req: NextRequest) {
 
   const { photoIds, spaceId } = parsed.data
 
-  let spaceRow;
-  try {
-    const spacesResult = await db.select({ status: spaces.status }).from(spaces).where(eq(spaces.id, spaceId))
-    spaceRow = spacesResult[0];
-  } catch (error) {
-    console.error("Database connection error:", error)
-    return NextResponse.json({ error: "Failed to connect to database" }, { status: 500 })
-  }
-
+  const [spaceRow] = await db.select({ status: spaces.status }).from(spaces).where(eq(spaces.id, spaceId))
   if (!spaceRow || spaceRow.status !== "active") {
     return NextResponse.json({ error: "Space not available" }, { status: 403 })
   }
@@ -38,36 +28,13 @@ export async function POST(req: NextRequest) {
     .from(photos)
     .where(and(inArray(photos.id, photoIds), eq(photos.spaceId, spaceId)))
 
-  void db.insert(analyticsEvents).values({
-    spaceId,
-    eventType: "bulk_download",
-    meta: String(photoRows.length),
-  })
+  // Return presigned URLs — client downloads directly from R2, no server proxying
+  const urls = await Promise.all(
+    photoRows.map(async (p) => ({
+      id: p.id,
+      url: await getPresignedDownloadUrl(p.originalKey!, 900), // 15 min
+    }))
+  )
 
-  const archive = archiver("zip", { zlib: { level: 1 } })
-  const passThrough = new PassThrough()
-  archive.pipe(passThrough)
-
-  const CONCURRENCY = 5
-  async function fetchAndAppend(photo: { id: string; originalKey: string }, index: number) {
-    const buf = await getObject(photo.originalKey)
-    archive.append(buf, { name: `photo-${index + 1}.jpg` })
-  }
-
-  const pool: Promise<void>[] = []
-  for (let i = 0; i < photoRows.length; i++) {
-    const p = fetchAndAppend(photoRows[i], i)
-    pool.push(p)
-    if (pool.length >= CONCURRENCY) await Promise.race(pool).then(() => pool.splice(0, pool.length, ...pool.filter(x => x !== p)))
-  }
-  await Promise.all(pool)
-  archive.finalize()
-
-  return new Response(passThrough as unknown as ReadableStream, {
-    headers: {
-      "Content-Type": "application/zip",
-      "Content-Disposition": `attachment; filename="fotospace-photos.zip"`,
-      "Transfer-Encoding": "chunked",
-    },
-  })
+  return NextResponse.json({ urls })
 }

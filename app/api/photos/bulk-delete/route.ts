@@ -37,5 +37,8 @@ export async function POST(req: NextRequest) {
 
   await db.delete(photos).where(inArray(photos.id, photoIds))
 
+  // Invalidate cluster cache
+  await db.update(spaces).set({ clustersCachedAt: null }).where(eq(spaces.id, rows[0].spaceId))
+
   return NextResponse.json({ ok: true })
 }

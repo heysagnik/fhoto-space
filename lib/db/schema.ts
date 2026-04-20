@@ -66,6 +66,8 @@ export const spaces = pgTable("spaces", {
   coverImageKey: text("cover_image_key"),
   coverImageUrl: text("cover_image_url"),
   welcomeMessage: text("welcome_message"),
+  cachedClusters: text("cached_clusters"), // JSON: FaceCluster[]
+  clustersCachedAt: timestamp("clusters_cached_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 })
@@ -84,6 +86,7 @@ export const photos = pgTable("photos", {
   faceCount: integer("face_count").notNull().default(0),
   rekognitionFaceIds: text("rekognition_face_ids").array().default([]),
   faceBoundingBoxes: text("face_bounding_boxes"), // JSON: [{faceId,left,top,width,height}]
+  faceCropKey: text("face_crop_key"), // R2 key for the primary face crop (112x112 JPEG)
   createdAt: timestamp("created_at").notNull().defaultNow(),
 })
 

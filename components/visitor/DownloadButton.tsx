@@ -22,13 +22,20 @@ export function DownloadButton({ photoIds, spaceId }: Props) {
         body: JSON.stringify({ photoIds, spaceId }),
       })
       if (!res.ok) throw new Error("Download failed")
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = "fotospace-photos.zip"
-      a.click()
-      URL.revokeObjectURL(url)
+      const { urls } = await res.json() as { urls: { id: string; url: string }[] }
+
+      // Trigger each download directly from R2 presigned URL
+      for (let i = 0; i < urls.length; i++) {
+        const a = document.createElement("a")
+        a.href = urls[i].url
+        a.download = `photo-${i + 1}.jpg`
+        a.style.display = "none"
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        // Small delay to avoid browser blocking multiple downloads
+        if (i < urls.length - 1) await new Promise((r) => setTimeout(r, 150))
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Download failed")
     } finally {
@@ -38,8 +45,8 @@ export function DownloadButton({ photoIds, spaceId }: Props) {
 
   return (
     <div className="flex flex-col items-end gap-1">
-      <button 
-        disabled={isLoading} 
+      <button
+        disabled={isLoading}
         onClick={handleDownload}
         className="h-10 px-4 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl flex items-center justify-center gap-2 text-[13px] font-semibold transition-all active:scale-[0.98] shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100"
       >

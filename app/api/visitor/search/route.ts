@@ -3,7 +3,7 @@ import { z } from "zod"
 import { db } from "@/lib/db"
 import { spaces, photos, analyticsEvents } from "@/lib/db/schema"
 import { searchFaces } from "@/lib/rekognition"
-import { publicUrl } from "@/lib/r2"
+import { getPresignedDownloadUrl } from "@/lib/r2"
 import { eq, inArray } from "drizzle-orm"
 
 const bodySchema = z.object({
@@ -11,23 +11,7 @@ const bodySchema = z.object({
   selfieBase64: z.string().max(10_000_000),
 })
 
-const rateLimitMap = new Map<string, number>()
-
-function checkRateLimit(ip: string, spaceId: string): boolean {
-  const now = Date.now()
-  for (const [key, time] of rateLimitMap) {
-    if (now - time > 60_000) rateLimitMap.delete(key)
-  }
-  const key = `${ip}-${spaceId}`
-  const last = rateLimitMap.get(key)
-  if (last && now - last < 10_000) return false
-  rateLimitMap.set(key, now)
-  return true
-}
-
 export async function POST(req: NextRequest) {
-  const ip = req.headers.get("x-forwarded-for") ?? "unknown"
-
   const parsed = bodySchema.safeParse(await req.json())
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
@@ -35,26 +19,21 @@ export async function POST(req: NextRequest) {
 
   const { spaceId, selfieBase64 } = parsed.data
 
-  if (!checkRateLimit(ip, spaceId)) {
-    return NextResponse.json({ error: "Too many requests" }, { status: 429 })
-  }
-
   const [space] = await db.select({ status: spaces.status }).from(spaces).where(eq(spaces.id, spaceId))
   if (!space || space.status !== "active") {
     return NextResponse.json({ error: "Space not available" }, { status: 403 })
   }
 
   const buffer = Buffer.from(selfieBase64.replace(/^data:image\/\w+;base64,/, ""), "base64")
-  
+
   let matchedPhotoIds: string[] = []
   try {
-    // Search AWS Rekognition collection created for this space
     matchedPhotoIds = await searchFaces(spaceId, buffer)
   } catch (error: any) {
-    if (error.name === 'InvalidParameterException' || error.message?.includes('face not detected')) {
+    if (error.name === "InvalidParameterException" || error.message?.includes("face not detected")) {
       return NextResponse.json({ photos: [], error: "no_face_detected" })
     }
-    console.error('[visitor/search] Rekognition search error:', error)
+    console.error("[visitor/search] Rekognition search error:", error)
     return NextResponse.json({ photos: [], error: "search_failed" }, { status: 500 })
   }
 
@@ -67,10 +46,12 @@ export async function POST(req: NextRequest) {
     .from(photos)
     .where(inArray(photos.id, matchedPhotoIds))
 
-  const result = photoRows.map((p) => ({
-    id: p.id,
-    thumbnailUrl: publicUrl(p.thumbnailKey ?? p.originalKey!),
-  }))
+  const result = await Promise.all(
+    photoRows.map(async (p) => ({
+      id: p.id,
+      thumbnailUrl: await getPresignedDownloadUrl(p.thumbnailKey ?? p.originalKey!, 3600),
+    }))
+  )
 
   void db.insert(analyticsEvents).values({
     spaceId,

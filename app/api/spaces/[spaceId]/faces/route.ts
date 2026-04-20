@@ -53,6 +53,8 @@ class UnionFind {
   }
 }
 
+const CACHE_TTL_MS = 60 * 60 * 1000 // 1 hour
+
 export async function GET(_req: NextRequest, { params }: Params) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -63,9 +65,20 @@ export async function GET(_req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Not found" }, { status: 404 })
   }
 
-  // faceId → photoId map
+  // Serve DB-persisted cache if fresh (survives across serverless instances)
+  if (space.cachedClusters && space.clustersCachedAt) {
+    const age = Date.now() - new Date(space.clustersCachedAt).getTime()
+    if (age < CACHE_TTL_MS) {
+      return NextResponse.json({ clusters: JSON.parse(space.cachedClusters) })
+    }
+  }
+
+  // faceId → photoId map from Rekognition
   const facesByPhoto = await listFacesByPhoto(spaceId)
-  if (facesByPhoto.size === 0) return NextResponse.json({ clusters: [] })
+  if (facesByPhoto.size === 0) {
+    await db.update(spaces).set({ cachedClusters: "[]", clustersCachedAt: new Date() }).where(eq(spaces.id, spaceId))
+    return NextResponse.json({ clusters: [] })
+  }
 
   // Filter to only photos that actually exist in DB (removes stale Rekognition entries)
   const rekogPhotoIds = [...facesByPhoto.keys()]
@@ -85,12 +98,10 @@ export async function GET(_req: NextRequest, { params }: Params) {
     }
   }
 
-  // Build similarity graph using Rekognition SearchFaces, then Union-Find cluster
+  // Build similarity graph via SearchFaces → Union-Find clustering
   const uf = new UnionFind()
-  for (const faceId of allFaceIds) uf.find(faceId) // initialize all nodes
+  for (const faceId of allFaceIds) uf.find(faceId)
 
-  // Run SearchFaces for every face — sequential to avoid rate limits
-  // AWS Rekognition SearchFaces default rate limit is 50 TPS, but can be much lower (5-10 TPS) on newer accounts.
   for (const faceId of allFaceIds) {
     let retries = 3
     while (retries > 0) {
@@ -99,64 +110,61 @@ export async function GET(_req: NextRequest, { params }: Params) {
           new SearchFacesCommand({
             CollectionId: spaceId,
             FaceId: faceId,
-            FaceMatchThreshold: 70, // lower = more matches = fewer false negatives
+            FaceMatchThreshold: 70,
             MaxFaces: 1000,
           })
         )
         for (const match of res.FaceMatches ?? []) {
           if (match.Face?.FaceId) uf.union(faceId, match.Face.FaceId)
         }
-        break // success, exit retry loop
+        break
       } catch (err: any) {
-        if (err.name === 'ProvisionedThroughputExceededException' && retries > 1) {
+        if (err.name === "ProvisionedThroughputExceededException" && retries > 1) {
           retries--
-          // exponential backoff delay: 1000ms, 2000ms
-          await new Promise(r => setTimeout(r, (4 - retries) * 1000))
+          await new Promise((r) => setTimeout(r, (4 - retries) * 1000))
         } else {
-          console.error('[faces] SearchFaces failed for', faceId, err)
+          console.error("[faces] SearchFaces failed for", faceId, err)
           break
         }
       }
     }
   }
 
-  // Group faceIds → person clusters → collect photoIds per cluster
-  const faceGroups = uf.groups() // root → [faceIds]
+  const faceGroups = uf.groups()
   const personClusters: { representativeFaceId: string; photoIds: Set<string> }[] = []
-
   for (const [, faceIds] of faceGroups) {
     const photoIds = new Set(faceIds.map((f) => faceToPhoto.get(f)!).filter(Boolean))
     personClusters.push({ representativeFaceId: faceIds[0], photoIds })
   }
-
-  // Sort largest clusters first
   personClusters.sort((a, b) => b.photoIds.size - a.photoIds.size)
 
-  // Fetch thumbnails for representative photos
   const repPhotoIds = personClusters.map((c) => [...c.photoIds][0])
   const thumbRows = await db
     .select({ id: photos.id, thumbnailKey: photos.thumbnailKey })
     .from(photos)
     .where(inArray(photos.id, repPhotoIds))
-
   const thumbMap = new Map(thumbRows.map((r) => [r.id, r.thumbnailKey]))
 
-  const clusters: FaceCluster[] = await Promise.all(
-    personClusters
-      .filter((c) => thumbMap.get([...c.photoIds][0]))
-      .map(async (c, i) => {
-        const repPhotoId = [...c.photoIds][0]
-        return {
-          clusterId: i,
-          representativePhotoId: repPhotoId,
-          representativeFaceId: c.representativeFaceId,
-          thumbnailUrl: publicUrl(thumbMap.get(repPhotoId)!),
-          faceCropUrl: `/api/photos/${repPhotoId}/face-crop?faceId=${c.representativeFaceId}`,
-          photoCount: c.photoIds.size,
-          photoIds: [...c.photoIds],
-        }
-      })
-  )
+  const clusters: FaceCluster[] = personClusters
+    .filter((c) => thumbMap.get([...c.photoIds][0]))
+    .map((c, i) => {
+      const repPhotoId = [...c.photoIds][0]
+      return {
+        clusterId: i,
+        representativePhotoId: repPhotoId,
+        representativeFaceId: c.representativeFaceId,
+        thumbnailUrl: publicUrl(thumbMap.get(repPhotoId)!),
+        faceCropUrl: `/api/photos/${repPhotoId}/face-crop?faceId=${c.representativeFaceId}`,
+        photoCount: c.photoIds.size,
+        photoIds: [...c.photoIds],
+      }
+    })
+
+  // Persist to DB so all future serverless instances skip the Rekognition loop
+  await db
+    .update(spaces)
+    .set({ cachedClusters: JSON.stringify(clusters), clustersCachedAt: new Date() })
+    .where(eq(spaces.id, spaceId))
 
   return NextResponse.json({ clusters })
 }
