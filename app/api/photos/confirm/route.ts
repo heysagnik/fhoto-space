@@ -5,7 +5,6 @@ import { getSession } from "@/lib/auth"
 import { eq } from "drizzle-orm"
 import { z } from "zod"
 import { getObject, putObject } from "@/lib/r2"
-import { enqueueFaceIndex } from "@/lib/queue"
 import sharp from "sharp"
 
 const bodySchema = z.object({
@@ -37,7 +36,7 @@ export async function POST(req: NextRequest) {
 
   await db.update(photos).set({ sizeBytes, width, height }).where(eq(photos.id, photoId))
 
-  // Generate thumbnail (fast — sharp resize only)
+  // Generate thumbnail (fast — sharp resize only, ~200–300ms)
   const original = await getObject(photo.originalKey)
   const thumbBuffer = await sharp(original)
     .resize(1200, 1200, { fit: "inside" })
@@ -48,8 +47,16 @@ export async function POST(req: NextRequest) {
   await putObject(thumbnailKey, thumbBuffer, "image/jpeg")
   await db.update(photos).set({ thumbnailKey }).where(eq(photos.id, photoId))
 
-  // Enqueue face indexing — runs in background worker, not here
-  await enqueueFaceIndex({ photoId, spaceId, thumbnailKey })
+  // Fire-and-forget to Render worker — does not block this response
+  const workerUrl = process.env.WORKER_URL
+  const workerSecret = process.env.WORKER_SECRET
+  if (workerUrl && workerSecret) {
+    fetch(`${workerUrl}/index`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-worker-secret": workerSecret },
+      body: JSON.stringify({ photoId, spaceId, thumbnailKey }),
+    }).catch((err) => console.error("[confirm] worker call failed:", err))
+  }
 
   return NextResponse.json({ ok: true })
 }
