@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# ONNX model weights — large binaries, download separately
+public/models/*.onnx

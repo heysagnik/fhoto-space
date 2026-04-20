@@ -1,26 +1,171 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ─── Design Tokens ──────────────────────────────────────────────────────────
+   Single source of truth for radius, shadow, spacing, and page colour.
+   ────────────────────────────────────────────────────────────────────────── */
+
+:root,
+.light {
+  --radius: 0.5rem;
+
+  /* Noticeably darker than card surface so cards pop */
+  --page-bg: oklch(93% 0.006 264);
+
+  /* Six-layer shadow anatomy — single light source, no pure black */
+  --card-shadow:
+    0 0 0 1px oklch(88% 0.008 264),
+    0 1px 2px oklch(15% 0.03 264 / 0.06),
+    0 3px 8px oklch(15% 0.03 264 / 0.08);
+  --card-shadow-hover:
+    0 0 0 1px oklch(82% 0.01 264),
+    0 2px 4px oklch(15% 0.03 264 / 0.07),
+    0 6px 16px oklch(15% 0.03 264 / 0.10),
+    0 12px 28px oklch(15% 0.03 264 / 0.06);
+
+  --page-x: 1.5rem;
+  --page-y: 2rem;
+  --header-h: 3.5rem;
+
+  /* Nav sidebar width */
+  --nav-w: 13rem;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+/* ─── Base ───────────────────────────────────────────────────────────────── */
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--page-bg);
+  font-family: var(--font-geist-sans, system-ui, sans-serif);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-wrap: pretty;
 }
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-geist-sans, system-ui, sans-serif);
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+
+/* Tabular numbers for all data displays */
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* ─── Layout ─────────────────────────────────────────────────────────────── */
+
+.page-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background-color: var(--page-bg);
+}
+
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  height: var(--header-h);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0 var(--page-x);
+  background-color: oklch(100% 0 0 / 0.92);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  backdrop-filter: blur(16px) saturate(1.4);
+  border-bottom: 1px solid oklch(88% 0.006 264);
+  box-shadow: 0 1px 3px oklch(15% 0.03 264 / 0.06);
+  font-size: 0.875rem;
+}
+
+.page-content {
+  flex: 1;
+  width: 100%;
+  max-width: 76rem;
+  margin: 0 auto;
+  padding: var(--page-y) var(--page-x);
+}
+
+/* ─── Interactive Card ───────────────────────────────────────────────────── */
+
+.card-interactive {
+  box-shadow: var(--card-shadow);
+  cursor: pointer;
+  transition: box-shadow 180ms ease, transform 180ms ease;
+  will-change: transform;
+}
+
+.card-interactive:hover {
+  box-shadow: var(--card-shadow-hover);
+  transform: translateY(-2px);
+}
+
+.card-interactive:active {
+  transform: translateY(0) scale(0.99);
+  box-shadow: var(--card-shadow);
+  transition-duration: 80ms;
+}
+
+/* ─── Space nav sidebar ──────────────────────────────────────────────────── */
+
+.space-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: calc(var(--radius) * 1.5);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-muted-foreground, oklch(50% 0 0));
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+  user-select: none;
+}
+
+.space-nav-item:hover {
+  background-color: oklch(94% 0.005 264);
+  color: var(--color-foreground, oklch(10% 0 0));
+}
+
+.space-nav-item[data-active="true"] {
+  background-color: oklch(92% 0.012 264);
+  color: var(--color-foreground, oklch(10% 0 0));
+  font-weight: 600;
+}
+
+/* ─── Drop zone ──────────────────────────────────────────────────────────── */
+
+.drop-zone {
+  border: 2px dashed oklch(85% 0.008 264);
+  border-radius: calc(var(--radius) * 2);
+  transition: border-color 160ms ease, background-color 160ms ease;
+  cursor: pointer;
+}
+
+.drop-zone:hover,
+.drop-zone[data-dragging="true"] {
+  border-color: var(--color-primary, oklch(55% 0.2 264));
+  background-color: oklch(97% 0.015 264);
+}
+
+/* ─── Danger zone card ───────────────────────────────────────────────────── */
+
+.danger-card {
+  border-color: oklch(75% 0.18 25 / 0.35);
+  background-color: oklch(99% 0.008 25);
+}
+
+/* ─── Radix/shadcn animation keyframes ──────────────────────────────────── */
+
+@keyframes fade-in { from { opacity: 0 } to { opacity: 1 } }
+@keyframes fade-out { from { opacity: 1 } to { opacity: 0 } }
+@keyframes zoom-in-95 { from { opacity: 0; transform: translate(-50%,-50%) scale(.95) } to { opacity: 1; transform: translate(-50%,-50%) scale(1) } }
+@keyframes zoom-out-95 { from { opacity: 1; transform: translate(-50%,-50%) scale(1) } to { opacity: 0; transform: translate(-50%,-50%) scale(.95) } }
+@keyframes slide-in-from-top-2 { from { transform: translateY(-0.5rem) } to { transform: translateY(0) } }
+@keyframes slide-in-from-bottom-2 { from { transform: translateY(0.5rem) } to { transform: translateY(0) } }
+
+.data-\[state\=open\]\:animate-in[data-state=open] { animation-duration: 150ms; animation-fill-mode: both; }
+.data-\[state\=closed\]\:animate-out[data-state=closed] { animation-duration: 100ms; animation-fill-mode: both; }
+.data-\[state\=open\]\:fade-in-0[data-state=open] { animation-name: fade-in; }
+.data-\[state\=closed\]\:fade-out-0[data-state=closed] { animation-name: fade-out; }
+.data-\[state\=open\]\:zoom-in-95[data-state=open] { animation-name: zoom-in-95; }
+.data-\[state\=closed\]\:zoom-out-95[data-state=closed] { animation-name: zoom-out-95; }
+.data-\[side\=bottom\]\:slide-in-from-top-2[data-side=bottom] { animation-name: slide-in-from-top-2; }
+.data-\[side\=top\]\:slide-in-from-bottom-2[data-side=top] { animation-name: slide-in-from-bottom-2; }

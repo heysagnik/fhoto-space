@@ -16,6 +16,33 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## Cloudflare R2 setup (required for direct browser uploads)
+
+This app uploads files directly from the browser to Cloudflare R2 signed URLs using `PUT`.
+
+Set these environment variables:
+
+```dotenv
+R2_ACCOUNT_ID=...
+R2_ACCESS_KEY_ID=...
+R2_SECRET_ACCESS_KEY=...
+R2_BUCKET_NAME=...
+R2_PUBLIC_URL=...
+```
+
+Then configure CORS on your R2 bucket (Cloudflare Dashboard -> R2 -> Bucket -> Settings -> CORS):
+
+```json
+[
+	{
+		"AllowedOrigins": ["http://localhost:3000", "http://127.0.0.1:3000"],
+		"AllowedMethods": ["PUT", "GET", "HEAD"],
+		"AllowedHeaders": ["content-type"],
+		"MaxAgeSeconds": 3600
+	}
+]
+```
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
