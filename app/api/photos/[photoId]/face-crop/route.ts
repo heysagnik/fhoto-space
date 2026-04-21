@@ -14,8 +14,9 @@ export async function GET(req: NextRequest, { params }: Params) {
   const [photo] = await db.select().from(photos).where(eq(photos.id, photoId))
   if (!photo?.thumbnailKey) return new NextResponse(null, { status: 404 })
 
-  // Fast path: pre-generated crop stored in R2 — redirect, no server processing
-  if (photo.faceCropKey) {
+  // Fast path: pre-generated crop stored in R2 — only valid for the primary face (faces[0])
+  const primaryFaceId = photo.rekognitionFaceIds?.[0]
+  if (photo.faceCropKey && (!faceId || faceId === primaryFaceId)) {
     const url = await getPresignedDownloadUrl(photo.faceCropKey, 3600)
     return NextResponse.redirect(url, { status: 302 })
   }
