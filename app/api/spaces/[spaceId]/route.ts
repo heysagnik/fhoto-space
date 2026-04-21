@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
-import { spaces } from "@/lib/db/schema"
+import { photos, spaces } from "@/lib/db/schema"
 import { getSession } from "@/lib/auth"
 import { updateSpaceSchema } from "@/lib/validations"
 import { and, eq, ne } from "drizzle-orm"
+import { deleteObject } from "@/lib/r2"
+import { deleteFacesForPhoto } from "@/lib/rekognition"
 
 type Params = { params: Promise<{ spaceId: string }> }
 
@@ -69,6 +71,24 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Not found" }, { status: 404 })
   }
 
+  const spacePhotos = await db.select().from(photos).where(eq(photos.spaceId, spaceId))
+
+  await Promise.allSettled([
+    // Delete all photo R2 objects
+    ...spacePhotos.flatMap((p) => [
+      deleteObject(p.originalKey),
+      p.thumbnailKey ? deleteObject(p.thumbnailKey) : Promise.resolve(),
+      p.faceCropKey ? deleteObject(p.faceCropKey) : Promise.resolve(),
+    ]),
+    // Delete Rekognition face index entries
+    ...spacePhotos
+      .filter((p) => p.rekognitionFaceIds?.length)
+      .map((p) => deleteFacesForPhoto(p.spaceId, p.rekognitionFaceIds as string[])),
+    // Delete cover image
+    space.coverImageKey ? deleteObject(space.coverImageKey) : Promise.resolve(),
+  ])
+
+  await db.delete(photos).where(eq(photos.spaceId, spaceId))
   await db.delete(spaces).where(eq(spaces.id, spaceId))
 
   return new NextResponse(null, { status: 204 })
