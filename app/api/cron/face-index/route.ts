@@ -3,15 +3,16 @@ import { db } from "@/lib/db"
 import { photos } from "@/lib/db/schema"
 import { eq, and, isNotNull } from "drizzle-orm"
 
-const BATCH_SIZE = 50
-const DELAY_MS = Math.ceil(1000 / 3) // 3 per second
+// Stay safely under the 5 TPS Rekognition default (applies to all regions except the big 3)
+// Major regions (us-east-1, us-west-2, eu-west-1) get 50 TPS — 3/sec is safe everywhere
+const BATCH_SIZE = 30
+const DELAY_MS = Math.ceil(1000 / 3) // 3 per second = one every 334ms
 
 export async function GET(req: NextRequest) {
   if (req.headers.get("x-cron-secret") !== process.env.CRON_SECRET) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  // Find photos that have a thumbnail but never got face-indexed (e.g. tab was closed mid-batch)
   const pending = await db
     .select({ id: photos.id, spaceId: photos.spaceId })
     .from(photos)
@@ -19,31 +20,28 @@ export async function GET(req: NextRequest) {
     .limit(BATCH_SIZE)
 
   if (pending.length === 0) {
-    return NextResponse.json({ ok: true, processed: 0 })
+    return NextResponse.json({ ok: true, queued: 0 })
   }
 
   const baseUrl = new URL(req.url).origin
 
-  let processed = 0
-  for (const photo of pending) {
-    try {
-      await fetch(`${baseUrl}/api/photos/face-index`, {
+  // Fire each face-index request with throttle delay but don't await the indexing work —
+  // each /api/photos/face-index call runs independently so this route returns well within
+  // Vercel's function timeout while the indexing happens in parallel serverless invocations.
+  ;(async () => {
+    for (const photo of pending) {
+      fetch(`${baseUrl}/api/photos/face-index`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          // forward the session-less call — face-index route checks ownership,
-          // so we use a service-to-service header instead
           "x-cron-secret": process.env.CRON_SECRET!,
         },
         body: JSON.stringify({ photoId: photo.id, spaceId: photo.spaceId }),
-      })
-      processed++
-    } catch (err) {
-      console.error("[cron/face-index] failed for photo", photo.id, err)
-    }
-    // Throttle to 3 req/sec
-    await new Promise((r) => setTimeout(r, DELAY_MS))
-  }
+      }).catch((err) => console.error("[cron/face-index] dispatch failed for", photo.id, err))
 
-  return NextResponse.json({ ok: true, processed })
+      await new Promise((r) => setTimeout(r, DELAY_MS))
+    }
+  })()
+
+  return NextResponse.json({ ok: true, queued: pending.length })
 }
