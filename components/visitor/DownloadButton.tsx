@@ -24,16 +24,18 @@ export function DownloadButton({ photoIds, spaceId }: Props) {
       if (!res.ok) throw new Error("Download failed")
       const { urls } = await res.json() as { urls: { id: string; url: string }[] }
 
-      // Trigger each download directly from R2 presigned URL
+      // Fetch each file as a blob so the download attribute works cross-origin
       for (let i = 0; i < urls.length; i++) {
+        const blob = await fetch(urls[i].url).then((r) => r.blob())
+        const objectUrl = URL.createObjectURL(blob)
         const a = document.createElement("a")
-        a.href = urls[i].url
+        a.href = objectUrl
         a.download = `photo-${i + 1}.jpg`
         a.style.display = "none"
         document.body.appendChild(a)
         a.click()
         document.body.removeChild(a)
-        // Small delay to avoid browser blocking multiple downloads
+        URL.revokeObjectURL(objectUrl)
         if (i < urls.length - 1) await new Promise((r) => setTimeout(r, 150))
       }
     } catch (e) {
