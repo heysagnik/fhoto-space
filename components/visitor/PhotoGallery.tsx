@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogHeader } from "@/components/ui/dialog"
 import { ChevronLeft, ChevronRight } from "lucide-react"
@@ -27,11 +27,11 @@ export function PhotoGallery({ photos }: Props) {
 
   return (
     <div className="w-full h-full">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-4 md:gap-6 p-2 sm:p-4 md:p-6 lg:p-8">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-1.5 sm:gap-3 md:gap-4 p-2 sm:p-4 md:p-6">
           {photos.map((photo, i) => (
             <div
               key={photo.id}
-              className="aspect-square overflow-hidden rounded-2xl cursor-pointer bg-zinc-100 relative group shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-lg transition-all active:scale-[0.98] border border-black/[0.03]"
+              className="aspect-square overflow-hidden rounded-xl sm:rounded-2xl cursor-pointer bg-zinc-100 relative group shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-lg transition-all active:scale-[0.98] border border-black/[0.03]"
               onClick={() => setLightboxIndex(i)}
             >
               <Image
@@ -66,6 +66,21 @@ function LightboxModal({
   photo: MatchedPhoto; index: number; total: number
   onClose: () => void; onPrev: () => void; onNext: () => void
 }) {
+  const touchStart = useRef<number | null>(null)
+
+  function handleTouchStart(e: React.TouchEvent) {
+    touchStart.current = e.touches[0].clientX
+  }
+
+  function handleTouchEnd(e: React.TouchEvent) {
+    if (touchStart.current === null) return
+    const delta = touchStart.current - e.changedTouches[0].clientX
+    touchStart.current = null
+    if (Math.abs(delta) < 50) return
+    if (delta > 0) onNext()
+    else onPrev()
+  }
+
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
       <DialogContent
@@ -78,7 +93,11 @@ function LightboxModal({
         </DialogHeader>
         
         <div className="relative flex h-full flex-col justify-between pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-0">
-          <div className="relative flex min-h-0 flex-1 items-center justify-center p-0 sm:p-2">
+          <div
+            className="relative flex min-h-0 flex-1 items-center justify-center p-0 sm:p-2"
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+          >
             <Image
               src={photo.thumbnailUrl}
               fill

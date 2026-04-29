@@ -3,6 +3,7 @@ import {
   CreateCollectionCommand,
   IndexFacesCommand,
   SearchFacesByImageCommand,
+  SearchFacesCommand,
   ListFacesCommand,
   DeleteFacesCommand,
   type FaceRecord,
@@ -60,30 +61,54 @@ export async function indexFaces(
 
 // Search for faces matching a selfie within a space collection.
 // Returns photoIds of matching photos (via ExternalImageId).
+//
+// Two-phase search so we don't miss photos:
+//   1. SearchFacesByImageCommand (max 4096) — matches against the selfie.
+//   2. SearchFacesCommand for each matched faceId (max 4096 each) — finds
+//      additional photos of the same person not returned in phase 1.
 export async function searchFaces(
   spaceId: string,
   selfieBytes: Buffer,
-  threshold = 80, // minimum match confidence %
+  threshold = 80,
 ): Promise<string[]> {
   try {
-    const res = await client.send(
+    // Phase 1: find faces that match the selfie
+    const phase1 = await client.send(
       new SearchFacesByImageCommand({
         CollectionId: spaceId,
         Image: { Bytes: selfieBytes },
         FaceMatchThreshold: threshold,
-        MaxFaces: 200,
+        MaxFaces: 4096,
       })
     )
 
     const photoIds = new Set<string>()
-    for (const match of res.FaceMatches ?? []) {
-      if (match.Face?.ExternalImageId) {
-        photoIds.add(match.Face.ExternalImageId)
+    const matchedFaceIds: string[] = []
+
+    for (const match of phase1.FaceMatches ?? []) {
+      if (match.Face?.ExternalImageId) photoIds.add(match.Face.ExternalImageId)
+      if (match.Face?.FaceId) matchedFaceIds.push(match.Face.FaceId)
+    }
+
+    // Phase 2: for each matched face, search for similar faces in the collection.
+    // SearchFacesCommand has no pagination but supports up to 4096 results —
+    // sufficient to cover all photos of one person in a large event.
+    for (const faceId of matchedFaceIds) {
+      const res = await client.send(
+        new SearchFacesCommand({
+          CollectionId: spaceId,
+          FaceId: faceId,
+          FaceMatchThreshold: threshold,
+          MaxFaces: 4096,
+        })
+      )
+      for (const match of res.FaceMatches ?? []) {
+        if (match.Face?.ExternalImageId) photoIds.add(match.Face.ExternalImageId)
       }
     }
+
     return [...photoIds]
   } catch (err: unknown) {
-    // Collection doesn't exist yet — no photos indexed
     if ((err as { name?: string }).name === "ResourceNotFoundException") return []
     throw err
   }

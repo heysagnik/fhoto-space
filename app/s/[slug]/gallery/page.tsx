@@ -36,7 +36,7 @@ export default function GalleryPage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-[#FDFDFD] font-sans">
-      <header className="sticky top-0 z-10 bg-white/60 backdrop-blur-md border-b border-black/[0.05] flex items-center justify-between px-4 py-3 sm:px-6 shadow-sm">
+      <header className="sticky top-0 z-10 bg-white/60 backdrop-blur-md border-b border-black/[0.05] flex items-center justify-between px-4 py-3 sm:px-6 shadow-sm pt-[max(0.75rem,env(safe-area-inset-top))]">
         <button
           onClick={() => router.push(`/s/${params.slug}`)}
           className="w-10 h-10 rounded-full flex items-center justify-center text-zinc-900 hover:bg-black/[0.03] active:scale-95 transition-all border border-transparent hover:border-black/[0.05]"

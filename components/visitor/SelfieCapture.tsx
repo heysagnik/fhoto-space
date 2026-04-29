@@ -209,7 +209,7 @@ export function SelfieCapture({ isOpen, onClose, spaceId, onResults }: Props) {
       </div>
 
       {/* Bottom controls */}
-      <div className="absolute bottom-0 inset-x-0 px-6 pb-12 pt-16 flex flex-col gap-4 justify-center bg-gradient-to-t from-black via-black/80 to-transparent">
+      <div className="absolute bottom-0 inset-x-0 px-6 pb-[max(3rem,env(safe-area-inset-bottom))] pt-16 flex flex-col gap-4 justify-center bg-gradient-to-t from-black via-black/80 to-transparent">
         {error && (
           <div className="flex flex-col items-center w-full max-w-sm mx-auto">
             <label className="w-full bg-white text-black px-5 py-4 rounded-2xl text-[15px] font-semibold cursor-pointer transition-all active:scale-[0.98] flex items-center justify-center gap-2 shadow-xl hover:bg-zinc-100">
