@@ -2,7 +2,6 @@
 
 import { useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
-import Image from "next/image"
 
 interface Props {
   spaceId: string
@@ -95,7 +94,7 @@ export function CoverPhotoUpload({ spaceId, initialUrl }: Props) {
         {coverUrl ? (
           <div className="flex flex-col gap-4">
             <div className="relative w-full max-w-sm h-44 rounded-xl overflow-hidden border border-slate-200 shadow-sm">
-              <Image src={coverUrl} alt="Cover" fill className="object-cover" sizes="384px" />
+              <img src={coverUrl} alt="Cover" className="absolute inset-0 w-full h-full object-cover" />
             </div>
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" disabled={uploading} onClick={() => fileInputRef.current?.click()}>

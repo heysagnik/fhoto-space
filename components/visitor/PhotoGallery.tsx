@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogHeader } from "@/components/ui/dialog"
 import { ChevronLeft, ChevronRight } from "lucide-react"
-import Image from "next/image"
 import type { MatchedPhoto } from "@/types"
 
 interface Props {
@@ -34,13 +33,12 @@ export function PhotoGallery({ photos }: Props) {
               className="aspect-square overflow-hidden rounded-xl sm:rounded-2xl cursor-pointer bg-zinc-100 relative group shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-lg transition-all active:scale-[0.98] border border-black/[0.03]"
               onClick={() => setLightboxIndex(i)}
             >
-              <Image
+              <img
                 src={photo.thumbnailUrl}
-                fill
-                sizes="(max-width:640px) 50vw, (max-width:768px) 33vw, (max-width:1024px) 25vw, 20vw"
-                className="object-cover transition-transform duration-300 group-hover:scale-105"
+                className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                loading="lazy"
+                decoding="async"
                 alt={`Photo ${i + 1}`}
-                unoptimized
               />
             </div>
           ))}
@@ -98,13 +96,10 @@ function LightboxModal({
             onTouchStart={handleTouchStart}
             onTouchEnd={handleTouchEnd}
           >
-            <Image
+            <img
               src={photo.thumbnailUrl}
-              fill
-              className="object-contain"
+              className="absolute inset-0 w-full h-full object-contain"
               alt={`Photo ${index + 1}`}
-              priority
-              unoptimized
             />
           </div>
           

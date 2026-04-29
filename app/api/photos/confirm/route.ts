@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
     .toBuffer()
 
   const thumbnailKey = `spaces/${spaceId}/thumbs/${photoId}.jpg`
-  await putObject(thumbnailKey, thumbBuffer, "image/jpeg")
+  await putObject(thumbnailKey, thumbBuffer, "image/jpeg", "public, max-age=31536000, immutable")
   await db.update(photos).set({ thumbnailKey }).where(eq(photos.id, photoId))
 
   return NextResponse.json({ ok: true })

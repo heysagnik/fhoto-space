@@ -2,7 +2,6 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import Image from "next/image"
 import { SelfieCapture } from "./SelfieCapture"
 import { Camera, User, Lock, Images } from "lucide-react"
 import type { MatchedPhoto } from "@/types"
@@ -34,7 +33,7 @@ export function LandingHero({ space }: { space: SpaceInfo }) {
       <section className="relative h-[22rem] sm:h-[28rem] md:h-[32rem] shrink-0 overflow-hidden">
         {space.coverImageUrl ? (
           <>
-            <Image src={space.coverImageUrl} fill className="object-cover" alt={space.name} priority />
+            <img src={space.coverImageUrl} className="absolute inset-0 w-full h-full object-cover" alt={space.name} />
             <div className="absolute inset-0 bg-black/40" />
           </>
         ) : (

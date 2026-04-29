@@ -42,12 +42,13 @@ export async function getObject(key: string): Promise<Buffer> {
   return Buffer.from(chunks)
 }
 
-export async function putObject(key: string, body: Buffer, contentType: string): Promise<void> {
+export async function putObject(key: string, body: Buffer, contentType: string, cacheControl?: string): Promise<void> {
   const command = new PutObjectCommand({
     Bucket: process.env.R2_BUCKET_NAME!,
     Key: key,
     Body: body,
     ContentType: contentType,
+    ...(cacheControl ? { CacheControl: cacheControl } : {}),
   })
   await r2.send(command)
 }

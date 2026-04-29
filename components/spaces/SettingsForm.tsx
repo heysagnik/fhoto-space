@@ -3,9 +3,9 @@
 import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import Image from "next/image"
 import type { Space } from "@/types"
 import { Image as ImageIcon, AlertTriangle, Loader2, Copy, Check, UploadCloud } from "lucide-react"
+
 
 const STATUS_OPTIONS = [
   { id: "draft",  label: "Draft",  hint: "Not visible to visitors",  dot: "bg-amber-400",   pill: "bg-amber-50/80 text-amber-700 border-amber-200/50" },
@@ -136,7 +136,7 @@ export function SettingsForm({ space }: { space: Space }) {
             {coverUrl ? (
               <div className="flex flex-col sm:flex-row items-start gap-5">
                 <div className="relative w-full sm:w-56 h-32 rounded-[1rem] overflow-hidden border border-black/[0.04] shrink-0 shadow-sm bg-zinc-50">
-                  <Image src={coverUrl} alt="Cover preview" fill className="object-cover" sizes="224px"/>
+                  <img src={coverUrl} alt="Cover preview" className="absolute inset-0 w-full h-full object-cover" />
                 </div>
                 <div className="flex flex-col gap-2 justify-end sm:h-32">
                   <p className="text-[13px] text-zinc-500 font-light">Shown as the hero image on the visitor gallery.</p>

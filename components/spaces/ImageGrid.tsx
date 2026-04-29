@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useState, useCallback, forwardRef, useImperativeHandle, useRef } from "react"
-import Image from "next/image"
 import { X, Trash2, CheckCircle2, Square, Image as ImageIcon, Loader2, Focus } from "lucide-react"
 
 interface GridPhoto {
@@ -223,13 +222,12 @@ export const ImageGrid = forwardRef<ImageGridHandle, Props>(function ImageGrid(
                 }
               }}
             >
-              <Image
+              <img
                 src={photo.thumbnailUrl}
-                fill
-                sizes="(max-width:640px) 50vw, (max-width:768px) 33vw, 20vw"
-                className="object-cover"
+                className="absolute inset-0 w-full h-full object-cover"
+                loading="lazy"
+                decoding="async"
                 alt=""
-                unoptimized
               />
 
               {(selectMode || isSelected) && (
@@ -309,13 +307,10 @@ export const ImageGrid = forwardRef<ImageGridHandle, Props>(function ImageGrid(
             onClick={(e) => e.stopPropagation()}
           >
             <div className="relative w-full h-full flex items-center justify-center">
-                <Image
+                <img
                   src={lightbox.thumbnailUrl}
-                  fill
-                  sizes="100vw"
-                  className="object-contain filter drop-shadow-2xl"
+                  className="absolute inset-0 w-full h-full object-contain filter drop-shadow-2xl"
                   alt=""
-                  unoptimized
                 />
             </div>
           </div>

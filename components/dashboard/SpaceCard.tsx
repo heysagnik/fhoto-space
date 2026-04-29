@@ -1,7 +1,6 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import Image from "next/image"
 import { ArrowRight, Image as ImageIcon } from "lucide-react"
 import type { Space, SpaceStatus } from "@/types"
 
@@ -31,12 +30,10 @@ export function SpaceCard({ space }: { space: Space }) {
     >
       <div className="relative w-full h-44 overflow-hidden bg-zinc-50 border-b border-black/[0.03]">
         {space.coverImageUrl ? (
-          <Image
+          <img
             src={space.coverImageUrl}
             alt={`${space.name} cover`}
-            fill
-            className="object-cover transition-transform duration-500 ease-out group-hover:scale-105"
-            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+            className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center bg-zinc-50/50">

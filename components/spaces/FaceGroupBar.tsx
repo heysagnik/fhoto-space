@@ -1,6 +1,5 @@
 "use client"
 
-import Image from "next/image"
 import { Badge } from "@/components/ui/badge"
 import type { FaceCluster } from "@/app/api/spaces/[spaceId]/faces/route"
 
@@ -57,13 +56,10 @@ export function FaceGroupBar({ clusters, selectedClusterId, onSelect }: Props) {
                 ? "border-blue-500 ring-2 ring-blue-200"
                 : "border-slate-200 hover:border-slate-400",
             ].join(" ")}>
-              <Image
+              <img
                 src={cluster.faceCropUrl}
-                fill
-                className="object-cover"
                 alt={`Person ${cluster.clusterId + 1}`}
-                sizes="56px"
-                unoptimized
+                className="absolute inset-0 w-full h-full object-cover"
               />
             </div>
             <span className={`text-[11px] font-semibold ${selectedClusterId === cluster.clusterId ? "text-blue-600" : "text-slate-500"}`}>
