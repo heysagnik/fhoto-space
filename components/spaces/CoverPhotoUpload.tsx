@@ -18,24 +18,55 @@ function Spinner() {
   )
 }
 
+async function uploadCover(spaceId: string, file: File): Promise<string> {
+  // Step 1: get presigned URL + key
+  const init = await fetch(`/api/spaces/${spaceId}/cover`)
+  if (!init.ok) throw new Error("Failed to get upload URL")
+  const { uploadUrl, key } = await init.json()
+
+  // Step 2: upload directly to R2 (no Vercel size limit)
+  const putRes = await fetch(uploadUrl, {
+    method: "PUT",
+    body: file,
+    headers: { "Content-Type": "image/jpeg" },
+  })
+  if (!putRes.ok) throw new Error("Upload to storage failed")
+
+  // Step 3: confirm with backend and get public URL
+  const confirm = await fetch(`/api/spaces/${spaceId}/cover`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ key }),
+  })
+  if (!confirm.ok) throw new Error("Failed to save cover")
+  const data = await confirm.json()
+  return data.coverImageUrl
+}
+
 export function CoverPhotoUpload({ spaceId, initialUrl }: Props) {
   const [coverUrl, setCoverUrl] = useState<string | null>(initialUrl)
   const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-    setUploading(true)
-    const form = new FormData()
-    form.append("file", file)
-    const res = await fetch(`/api/spaces/${spaceId}/cover`, { method: "POST", body: form })
-    setUploading(false)
-    if (res.ok) {
-      const data = await res.json()
-      setCoverUrl(data.coverImageUrl)
-    }
     e.target.value = ""
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setError("Only JPEG, PNG or WebP allowed")
+      return
+    }
+    setError(null)
+    setUploading(true)
+    try {
+      const url = await uploadCover(spaceId, file)
+      setCoverUrl(url)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed")
+    } finally {
+      setUploading(false)
+    }
   }
 
   async function handleRemove() {
@@ -68,7 +99,7 @@ export function CoverPhotoUpload({ spaceId, initialUrl }: Props) {
             </div>
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" disabled={uploading} onClick={() => fileInputRef.current?.click()}>
-                Replace
+                {uploading ? "Uploading…" : "Replace"}
               </Button>
               <Button variant="destructive" size="sm" disabled={uploading} onClick={handleRemove}>
                 Remove
@@ -77,7 +108,7 @@ export function CoverPhotoUpload({ spaceId, initialUrl }: Props) {
           </div>
         ) : (
           <div
-            className="drop-zone flex flex-col items-center justify-center gap-3 py-12 w-full max-w-sm"
+            className="drop-zone flex flex-col items-center justify-center gap-3 py-12 w-full max-w-sm cursor-pointer"
             onClick={() => !uploading && fileInputRef.current?.click()}
           >
             {uploading ? <Spinner /> : (
@@ -91,15 +122,16 @@ export function CoverPhotoUpload({ spaceId, initialUrl }: Props) {
                 </div>
                 <div className="text-center">
                   <p className="text-sm font-semibold text-slate-700">Upload cover photo</p>
-                  <p className="text-xs text-slate-400 mt-1">JPEG or PNG · up to 10 MB</p>
+                  <p className="text-xs text-slate-400 mt-1">JPEG, PNG or WebP · any size</p>
                 </div>
               </>
             )}
           </div>
         )}
+        {error && <p className="text-xs text-red-500 mt-2">{error}</p>}
       </div>
 
-      <input ref={fileInputRef} type="file" accept="image/jpeg,image/png" className="hidden" onChange={handleFile} />
+      <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleFile} />
     </div>
   )
 }

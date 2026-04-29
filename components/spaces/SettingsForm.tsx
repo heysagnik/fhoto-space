@@ -77,16 +77,36 @@ export function SettingsForm({ space }: { space: Space }) {
   }
 
   async function handleCoverFile(file: File) {
-    if (!["image/jpeg", "image/png"].includes(file.type)) return
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) return
     setUploading(true)
-    const form = new FormData()
-    form.append("file", file)
-    const res = await fetch(`/api/spaces/${space.id}/cover`, { method: "POST", body: form })
-    setUploading(false)
-    if (res.ok) {
-      const data = await res.json()
+    try {
+      // Step 1: get presigned URL + key
+      const init = await fetch(`/api/spaces/${space.id}/cover`)
+      if (!init.ok) throw new Error("Failed to get upload URL")
+      const { uploadUrl, key } = await init.json()
+
+      // Step 2: upload directly to R2 (bypasses Vercel 4.5 MB body limit)
+      const putRes = await fetch(uploadUrl, {
+        method: "PUT",
+        body: file,
+        headers: { "Content-Type": "image/jpeg" },
+      })
+      if (!putRes.ok) throw new Error("Upload to storage failed")
+
+      // Step 3: confirm with backend
+      const confirm = await fetch(`/api/spaces/${space.id}/cover`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key }),
+      })
+      if (!confirm.ok) throw new Error("Failed to save cover")
+      const data = await confirm.json()
       setCoverUrl(data.coverImageUrl)
       toast.success("Cover updated")
+    } catch {
+      toast.error("Upload failed", { description: "Could not upload cover photo." })
+    } finally {
+      setUploading(false)
     }
   }
 
