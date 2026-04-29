@@ -59,13 +59,31 @@ export async function indexFaces(
   }))
 }
 
+async function retryWithBackoff<T>(fn: () => Promise<T>, maxAttempts = 5): Promise<T> {
+  let delay = 200
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn()
+    } catch (err: unknown) {
+      const name = (err as { name?: string }).name
+      if (name === "ProvisionedThroughputExceededException" && attempt < maxAttempts) {
+        await new Promise((r) => setTimeout(r, delay + Math.random() * 100))
+        delay *= 2
+        continue
+      }
+      throw err
+    }
+  }
+  throw new Error("retryWithBackoff: unreachable")
+}
+
 // Search for faces matching a selfie within a space collection.
 // Returns photoIds of matching photos (via ExternalImageId).
 //
 // Two-phase search so we don't miss photos:
 //   1. SearchFacesByImageCommand (max 4096) — matches against the selfie.
-//   2. SearchFacesCommand for each matched faceId (max 4096 each) — finds
-//      additional photos of the same person not returned in phase 1.
+//   2. SearchFacesCommand on a sample of matched faceIds (max 3) to catch
+//      photos not returned in phase 1 without overloading provisioned TPS.
 export async function searchFaces(
   spaceId: string,
   selfieBytes: Buffer,
@@ -73,13 +91,15 @@ export async function searchFaces(
 ): Promise<string[]> {
   try {
     // Phase 1: find faces that match the selfie
-    const phase1 = await client.send(
-      new SearchFacesByImageCommand({
-        CollectionId: spaceId,
-        Image: { Bytes: selfieBytes },
-        FaceMatchThreshold: threshold,
-        MaxFaces: 4096,
-      })
+    const phase1 = await retryWithBackoff(() =>
+      client.send(
+        new SearchFacesByImageCommand({
+          CollectionId: spaceId,
+          Image: { Bytes: selfieBytes },
+          FaceMatchThreshold: threshold,
+          MaxFaces: 4096,
+        })
+      )
     )
 
     const photoIds = new Set<string>()
@@ -90,17 +110,20 @@ export async function searchFaces(
       if (match.Face?.FaceId) matchedFaceIds.push(match.Face.FaceId)
     }
 
-    // Phase 2: for each matched face, search for similar faces in the collection.
-    // SearchFacesCommand has no pagination but supports up to 4096 results —
-    // sufficient to cover all photos of one person in a large event.
-    for (const faceId of matchedFaceIds) {
-      const res = await client.send(
-        new SearchFacesCommand({
-          CollectionId: spaceId,
-          FaceId: faceId,
-          FaceMatchThreshold: threshold,
-          MaxFaces: 4096,
-        })
+    // Phase 2: use up to 3 representative face IDs to find additional photos
+    // of the same person that fell outside the phase-1 result window.
+    // Capped at 3 to stay within provisioned TPS.
+    const sampleIds = matchedFaceIds.slice(0, 3)
+    for (const faceId of sampleIds) {
+      const res = await retryWithBackoff(() =>
+        client.send(
+          new SearchFacesCommand({
+            CollectionId: spaceId,
+            FaceId: faceId,
+            FaceMatchThreshold: threshold,
+            MaxFaces: 4096,
+          })
+        )
       )
       for (const match of res.FaceMatches ?? []) {
         if (match.Face?.ExternalImageId) photoIds.add(match.Face.ExternalImageId)
